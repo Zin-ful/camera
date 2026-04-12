@@ -7,6 +7,62 @@
 
 #define BUFFER_SIZE 4096
 
+void send_html_header(int socket) {
+    char *header = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
+    send(socket, header, strlen(header), 0);
+}
+
+void send_simple_response(int socket, char *status, char *content_type, char *body) {
+    printf("(send_simple_response) Sending response of type: %s\n", content_type);
+    char response[BUFFER_SIZE];
+    int len = snprintf(response, sizeof(response),
+        "HTTP/1.1 %s\r\n"
+        "Content-Type: %s\r\n"
+        "Content-Length: %zu\r\n"
+        "Connection: close\r\n\r\n"
+        "%s", status, content_type, strlen(body), body);
+    send(socket, response, len, 0);
+}
+
+
+void send_404(int socket) {
+    printf("(send_404) Sending 404\n");
+    char *body = "<html><body style='background-color:black;color:white;'>"
+                 "<h1>404 - File Not Found</h1></body></html>";
+    send_simple_response(socket, "404 Not Found", "text/html", body);
+}
+
+
+int send_html_file(char *path, int socket) {
+    FILE *file = fopen(path, "r");
+    if (!file) {
+        printf("(get_html_file) File not found\n");
+        return 0;
+    }
+    fseek(file, 0L, SEEK_END);
+    int size = ftell(file);
+    fseek(file, 0L, SEEK_SET);
+    send_html_header(socket);
+    char filedata[size];
+    while(fgets(filedata, sizeof(filedata), file)) {
+        send(socket, filedata, strlen(filedata), 0);
+    }
+    fclose(file);
+    return 1;
+}
+
+int get_html_file(char *path, char *filedata) {
+    FILE *file = fopen(path, "r");
+    if (!file) {
+        printf("(get_html_file) File not found\n");
+        return 0;
+    }
+    fgets(filedata, sizeof(filedata), file);
+    fclose(file);
+    return 1;
+}
+
+
 int main() {
     int server_fd;
     struct sockaddr_in addr = {AF_INET, htons(8080), INADDR_ANY};
@@ -34,47 +90,7 @@ int main() {
     char buffer[30000] = {0};
     read(new_socket, buffer, 30000);
     printf("Request Received\n\n%s\n\n###################\n", buffer);
-    send(socket, header, strlen(header), 0);
-    char html[BUFFER_SIZE] = {0};
-    if (!get_html_file("index.html", html)) {
-        send_404(socket);
-    }
-    send(socket, html, strlen(html), 0);
+    send_html_header(new_socket);
+    send_html_file("index.html", new_socket);
     
 }
-
-void send_html_header(int socket) {
-    char *header = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
-    send(socket, header, strlen(header), 0);
-}
-
-void send_simple_response(int socket, char *status, char *content_type, char *body) {
-    printf("(send_simple_response) Sending response of type: %s\n", content_type);
-    char response[BUFFER_SIZE];
-    int len = snprintf(response, sizeof(response),
-        "HTTP/1.1 %s\r\n"
-        "Content-Type: %s\r\n"
-        "Content-Length: %zu\r\n"
-        "Connection: close\r\n\r\n"
-        "%s", status, content_type, strlen(body), body);
-    send(socket, response, len, 0);
-}
-
-
-void send_404(int socket) {
-    printf("(send_404) Sending 404\n");
-    char *body = "<html><body style='background-color:black;color:white;'>"
-                 "<h1>404 - File Not Found</h1></body></html>";
-    send_simple_response(socket, "404 Not Found", "text/html", body);
-
-}
-
-int get_html_file(char *path, char *newfile) {
-    newfile = fopen(path, "r");
-    if (!newfile) {
-        printf("(get_html_file) File not found\n");
-        return 0;
-    }
-    return 1;
-}
-
