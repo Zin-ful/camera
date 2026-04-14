@@ -9,6 +9,52 @@
 
 #define BUFFER_SIZE 4096
 
+char *index_file = "<!DOCTYPE html>\n<html>\n<body>\n\n\n<h1>Security Server</h1>\n<p><a href='%s'>%s</a></p>\n<p><a href='%s'>%s</a></p>\n<p><a href='%s'>%s</a></p>\n<p><a href='%s'>%s</a></p>\n<p><a href='%s'>%s</a></p>\n<p><a href='%s'>%s</a></p>\n<p><a href='%s'>%s</a></p>\n<p><a href='%s'>%s</a></p>\n<p><a href='%s'>%s</a></p>\n<p><a href='%s'>%s</a></p>\n\n\n</body>\n</html>";
+
+struct CameraInfo {
+    int index;
+    char addr[16];
+    FILE *file;
+};
+
+int cameras_len() {
+    int j = 0;
+    for (int i = 0; i < 10; i++) {
+        if (Cameras[i]) {
+            printf("Camera found at %d", i);
+            j++;
+        }
+    }
+    return j;
+}
+
+int find_camera_slot() {
+    for (int i = 0; Cameras[i] != 0; i++);
+    printf("Camera slot found at %d", i);
+    return i;
+}
+
+int add_camera() {
+    printf("Adding a camera\n");
+    
+}
+
+void remove_camera(int index) {
+    printf("Removing camera\n");
+    //Cameras[index] = 0;
+}
+
+
+void set_video(int socket) {
+    printf("Creating new index.html page for video\n");
+    char formatted_html[256];
+    
+    snprintf(formatted_html, sizeof(formatted_html), index_file, );
+    FILE *file = fopen("index.html", "w");
+    
+    fwrite(formatted_html, sizeof(char), strlen(formatted_html), file);
+}
+
 void send_html_header(int socket) {
     char *header = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
     send(socket, header, strlen(header), 0);
@@ -26,14 +72,12 @@ void send_simple_response(int socket, char *status, char *content_type, char *bo
     send(socket, response, len, 0);
 }
 
-
 void send_404(int socket) {
     printf("(send_404) Sending 404\n");
     char *body = "<html><body style='background-color:black;color:white;'>"
                  "<h1>404 - File Not Found</h1></body></html>";
     send_simple_response(socket, "404 Not Found", "text/html", body);
 }
-
 
 int send_html_file(char *path, int socket) {
     FILE *file = fopen(path, "r");
@@ -65,13 +109,9 @@ int get_html_file(char *path, char *filedata) {
     return 1;
 }
 
-void get_video(int socket) {
-    print("Creating new index.html page for video\n");
-}
-
 void get_request(char *request, int socket) {
-	if strstr(request, "CAMERA_CONNECTION_REQUESTED") {
-        start_video(socket);
+	if (strstr(request, "CAMERA_CONNECTION_REQUESTED")) {
+        set_video(socket);
     }
 
     if (strstr(request, "/camera")) {
@@ -134,6 +174,8 @@ int main() {
    		perror("Mutex failed to init: ");
    	}
     
+    struct CameraInfo Cameras[10];
+
 	while (1) {
     	if (listen(server_fd, 3) < 0) {
         	perror("Socket failed to listen");
