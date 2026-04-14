@@ -65,8 +65,16 @@ int get_html_file(char *path, char *filedata) {
     return 1;
 }
 
+void get_video(int socket) {
+    print("Creating new index.html page for video\n");
+}
+
 void get_request(char *request, int socket) {
-	if (strstr(request, "/camera")) {
+	if strstr(request, "CAMERA_CONNECTION_REQUESTED") {
+        start_video(socket);
+    }
+
+    if (strstr(request, "/camera")) {
 		send_html_header(socket);
 	    if (send_html_file("camera.html", socket) < 0) {
 	    	printf("Failed to send HTML file\n");

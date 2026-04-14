@@ -59,5 +59,13 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
     
+    struct sockaddr_in local;
+    socklen_t len = sizeof(local);
+    getsockname(socket_fd, (struct sockaddr*)&local, &len);
+    printf("Local IP: %s\n", inet_ntoa(local.sin_addr));
+
+    char hello[128] = {0};
+    snprintf(hello, sizeof(hello), "CAMERA_CONNECTION_REQUESTED\nHost: %s\nAccept-Encoding: gzip, zstd", inet_ntoa(local.sin_addr));
+    send(socket_fd, hello, strlen(hello), 0);
     send_video(socket_fd);
 }
