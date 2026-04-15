@@ -12,15 +12,19 @@
 char *index_file = "<!DOCTYPE html>\n<html>\n<body>\n\n\n<h1>Security Server</h1>\n<p><a href='%s'>%s</a></p>\n<p><a href='%s'>%s</a></p>\n<p><a href='%s'>%s</a></p>\n<p><a href='%s'>%s</a></p>\n<p><a href='%s'>%s</a></p>\n<p><a href='%s'>%s</a></p>\n<p><a href='%s'>%s</a></p>\n<p><a href='%s'>%s</a></p>\n<p><a href='%s'>%s</a></p>\n<p><a href='%s'>%s</a></p>\n\n\n</body>\n</html>";
 
 struct CameraInfo {
+    int active;
     int index;
+    int socket;
     char addr[16];
     FILE *file;
 };
 
+struct CameraInfo Cameras[10];
+
 int cameras_len() {
     int j = 0;
     for (int i = 0; i < 10; i++) {
-        if (Cameras[i]) {
+        if (Cameras[i].socket) {
             printf("Camera found at %d", i);
             j++;
         }
@@ -29,19 +33,46 @@ int cameras_len() {
 }
 
 int find_camera_slot() {
-    for (int i = 0; Cameras[i] != 0; i++);
+    int i = 0;    
+    for (i = 0; Cameras[i].active != 0; i++) {
+        printf("Searching...\n");
+    }
     printf("Camera slot found at %d", i);
     return i;
 }
 
-int add_camera() {
+void add_camera(int socket, char *request) {
     printf("Adding a camera\n");
-    
+    int index = find_camera_slot();
+    char filename[10];
+    char host[16];
+    snprintf(filename, sizeof(filename), "camera_%d", index);
+    FILE *file = fopen(filename, "wb");
+    sscanf(request, "CAMERA_CONNECTION_REQUESTED\nHost: %15s", host);
+    struct CameraInfo camera = {1, index, socket, "", file};
+    strcpy(camera.addr, host);
+    printf("Camera initalized");
+    Cameras[index] = camera;
+    printf("Camera assigned: Active: %d\nIndex: %d\nSocket: %d\nHost: %s\n", Cameras[index].active, Cameras[index].index, Cameras[index].socket, Cameras[index].addr);
 }
 
 void remove_camera(int index) {
     printf("Removing camera\n");
-    //Cameras[index] = 0;
+    Cameras[index].active = 0;
+    Cameras[index].index = 0;
+    Cameras[index].socket = 0;
+    //Cameras[index].addr = {0};
+    fclose(Cameras[index].file);
+    
+}
+
+int find_active_camera(int socket) {
+    for (int i = 0; i < 10; i++) {
+        if (Cameras[i].socket == socket) {
+            return Cameras[i].index;
+        }
+    }
+    return 0;
 }
 
 
@@ -49,10 +80,15 @@ void set_video(int socket) {
     printf("Creating new index.html page for video\n");
     char formatted_html[256];
     
-    snprintf(formatted_html, sizeof(formatted_html), index_file, );
+    //snprintf(formatted_html, sizeof(formatted_html), index_file, );
     FILE *file = fopen("index.html", "w");
     
     fwrite(formatted_html, sizeof(char), strlen(formatted_html), file);
+    char buffer[4096] = {0};
+    int camera = find_active_camera(socket);
+    while (read(socket, buffer, 4096)) {
+        fwrite(buffer, sizeof(char), strlen(buffer), Cameras[camera].file);
+    }
 }
 
 void send_html_header(int socket) {
@@ -111,6 +147,7 @@ int get_html_file(char *path, char *filedata) {
 
 void get_request(char *request, int socket) {
 	if (strstr(request, "CAMERA_CONNECTION_REQUESTED")) {
+        add_camera(socket, request);
         set_video(socket);
     }
 
@@ -174,8 +211,6 @@ int main() {
    		perror("Mutex failed to init: ");
    	}
     
-    struct CameraInfo Cameras[10];
-
 	while (1) {
     	if (listen(server_fd, 3) < 0) {
         	perror("Socket failed to listen");
