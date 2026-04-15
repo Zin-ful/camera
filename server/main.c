@@ -86,8 +86,8 @@ void add_camera(int socket, char *request) {
 
     int index = find_camera_slot();
     char host[16];
-    char filename[10];
-    snprintf(filename, sizeof(filename), "camera_%d", index);
+    char filename[15];
+    snprintf(filename, sizeof(filename), "camera_%d.h264", index);
     FILE *file = fopen(filename, "wb");
 
     sscanf(request, "CAMERA_CONNECTION_REQUESTED\nHost: %15s", host);    
@@ -114,8 +114,14 @@ void remove_camera(int index) {
 void set_video(int socket) {
     int camera = find_active_camera(socket);
     char buffer[4096] = {0};
-    while (read(socket, buffer, 4096)) {
-        fwrite(buffer, sizeof(char), strlen(buffer), Cameras[camera].file);
+    int bytes;
+
+    printf("Starting video capture\n");
+    
+    while ((bytes = read(socket, buffer, 4096))) {
+        printf("Writing\n");
+        fwrite(buffer, 1, bytes, Cameras[camera].file);
+        fflush(Cameras[camera].file); //to write data in memory to file since we want live updates
     }
 }
 

@@ -18,11 +18,12 @@ void send_video(int socket_fd) {
     if (!camout) {
         perror("Failed to open Pi-Camera:");
     }
-    
+    setvbuf(camout, NULL, _IONBF, 0); //disable buffering
     size_t bytes_read;
     while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, camout)) > 0) {
-        printf("Reading from camera\n");
-        send(socket_fd, buffer, bytes_read, 0);
+        if (send(socket_fd, buffer, bytes_read, MSG_NOSIGNAL) <= 0) {
+            break;
+        }
     }
     
     printf("Camera stopped\n");
