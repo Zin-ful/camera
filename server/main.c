@@ -190,9 +190,9 @@ void get_request(char *request, int socket) {
 	if (strstr(request, "CAMERA_CONNECTION_REQUESTED")) {
         add_camera(socket, request);
         set_video(socket);
-    }
-
-    if (strstr(request, "/camera")) {
+        remove_camera(find_active_camera(socket));
+        generate_html_page();
+    } else if (strstr(request, "/camera")) {
 		send_html_header(socket);
 	    if (send_html_file("camera.html", socket) < 0) {
 	    	printf("Failed to send HTML file\n");

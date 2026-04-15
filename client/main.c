@@ -13,9 +13,9 @@ void send_video(int socket_fd) {
     FILE *camout;
 
     unsigned char buffer[BUFFER_SIZE];
-    camout = popen("rpicam-vid -t 0 --inline --mode 1280:720 --framerate 30 "
+    camout = popen("rpicam-vid -t 0 --codec h264 --inline --mode 1280:720 --framerate 25 "
                "--shutter 30000 --gain 2 --flicker 60 --awb indoor "
-               "--brightness 0.2 --codec h264 -f mpegts -o -", "r");
+               "--brightness 0.2 -o - 2>/dev/null", "r");
     if (!camout) {
         perror("Failed to open Pi-Camera:");
     }
