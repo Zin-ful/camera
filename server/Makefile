@@ -8,7 +8,8 @@ all: $(TARGET)
 
 $(TARGET): $(OBJECTS)
 	$(CC) $(CFLAGS) -o $(TARGET) $(OBJECTS)
-	@echo "Build complete! Run with: ./$(TARGET)"
+	rm -f *.o
+    @echo "Build complete! Run with: ./$(TARGET)"
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@

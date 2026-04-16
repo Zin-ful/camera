@@ -9,8 +9,9 @@
 
 #define BUFFER_SIZE 4096
 
-char *reset_index_file = "<!DOCTYPE html>\n<html>\n<body>\n\n\n<h1>Security Server</h1>\n\n\n</body>\n</html>";
+int safe_mode = 1;
 
+char *reset_index_file = "<!DOCTYPE html>\n<html>\n<body>\n\n\n<h1>Security Server</h1>\n\n\n</body>\n</html>";
 
 char *index_file = "<!DOCTYPE html>\n<html>\n<body>\n\n\n<h1>Security Server</h1>\n<p><a href='camera_%d'>%s %d</a></p>\n<p><a href='camera_%d'>%s %d</a></p>\n<p><a href='camera_%d'>%s %d</a></p>\n<p><a href='camera_%d'>%s %d</a></p>\n<p><a href='camera_%d'>%s %d</a></p>\n<p><a href='camera_%d'>%s %d</a></p>\n<p><a href='camera_%d'>%s %d</a></p>\n<p><a href='camera_%d'>%s %d</a></p>\n<p><a href='camera_%d'>%s %d</a></p>\n<p><a href='camera_%d'>%s %d</a></p>\n\n\n</body>\n</html>";
 
@@ -186,6 +187,46 @@ int get_html_file(char *path, char *filedata) {
     return 1;
 }
 
+void start_stream(char *request, int socket) {
+    char *header = "HTTP/1.1 200 OK\r\nContent-Type: video/mp4\r\nTransfer-Encoding: chunked\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n";
+    printf("Sending stream header\n");    
+    if (send(socket, header, strlen(header), 0) < 0) {
+        perror("Error sending stream header:");
+        exit(EXIT_FAILURE);
+    }
+    char camera[10];
+    int i;
+    printf("Looking for camera...\n");
+    for (i = 0; i < 10; i++) {
+        snprintf(camera, sizeof(camera), "camera_%d", i);
+        if (strstr(request, camera)) {
+            printf("Camera stream file found!\n");
+            break;   
+        }
+    }
+    if (i == 10 && safe_mode) {
+        printf("Camera stream file not found - ending program to prevent file errors. (turn safemode off to disable)\n");
+        exit(EXIT_FAILURE);
+    }
+    char filepath[15];
+    snprintf(filepath, sizeof(filepath), "%s%s", camera, ".h264");
+    
+    int bytes_read;
+    FILE *file = fopen(filepath, "rb");
+    if (!file) {
+        perror("Error opening and reading camera file:");
+        exit(EXIT_FAILURE);
+    }
+    char chunk_header[128];
+    char buffer[BUFFER_SIZE] = {0};
+    printf("File opened, init done. Sending bytes of size %d\n", BUFFER_SIZE);
+    while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, file))) {
+        snprintf(chunk_header, sizeof(chunk_header), "%zx\r\n", bytes_read);
+        send(socket, chunk_header, strlen(chunk_header), 1);
+        send(socket, buffer, bytes_read, 1);
+    }
+}
+
 void get_request(char *request, int socket) {
 	if (strstr(request, "CAMERA_CONNECTION_REQUESTED")) {
         add_camera(socket, request);
@@ -193,13 +234,8 @@ void get_request(char *request, int socket) {
         remove_camera(find_active_camera(socket));
         generate_html_page();
     } else if (strstr(request, "/camera")) {
-		send_html_header(socket);
-	    if (send_html_file("camera.html", socket) < 0) {
-	    	printf("Failed to send HTML file\n");
-	    } else {
-	    	printf("Sent HTML file\n");
-    	}
-    	printf("Getting camera\n\n");
+        printf("Starting stream to browser\n");
+		start_stream(request, socket);
 	} else {
 		send_html_header(socket);
 	    if (send_html_file("index.html", socket) < 0) {
