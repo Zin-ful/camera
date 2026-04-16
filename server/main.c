@@ -87,8 +87,8 @@ void add_camera(int socket, char *request) {
 
     int index = find_camera_slot();
     char host[16];
-    char filename[15];
-    snprintf(filename, sizeof(filename), "camera_%d.h264", index);
+    char filename[16];
+    snprintf(filename, sizeof(filename), "camera_%d.mjpeg", index);
     FILE *file = fopen(filename, "wb");
 
     sscanf(request, "CAMERA_CONNECTION_REQUESTED\nHost: %15s", host);    
@@ -188,7 +188,7 @@ int get_html_file(char *path, char *filedata) {
 }
 
 void start_stream(char *request, int socket) {
-    char *header = "HTTP/1.1 200 OK\r\nContent-Type: video/mp4\r\nTransfer-Encoding: chunked\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n";
+    char *header = "HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=frame\r\nTransfer-Encoding: chunked\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n";
     printf("Sending stream header\n");    
     if (send(socket, header, strlen(header), 0) < 0) {
         perror("Error sending stream header:");
@@ -208,8 +208,8 @@ void start_stream(char *request, int socket) {
         printf("Camera stream file not found - ending program to prevent file errors. (turn safemode off to disable)\n");
         exit(EXIT_FAILURE);
     }
-    char filepath[15];
-    snprintf(filepath, sizeof(filepath), "%s%s", camera, ".h264");
+    char filepath[16];
+    snprintf(filepath, sizeof(filepath), "%s%s", camera, ".mjpeg");
     
     int bytes_read;
     FILE *file = fopen(filepath, "rb");
@@ -221,9 +221,10 @@ void start_stream(char *request, int socket) {
     char buffer[BUFFER_SIZE] = {0};
     printf("File opened, init done. Sending bytes of size %d\n", BUFFER_SIZE);
     while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, file))) {
-        snprintf(chunk_header, sizeof(chunk_header), "%zx\r\n", bytes_read);
+        snprintf(chunk_header, sizeof(chunk_header), "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n", bytes_read);
         send(socket, chunk_header, strlen(chunk_header), 1);
         send(socket, buffer, bytes_read, 1);
+        send(socket, "\r\n", 2, 0);
     }
 }
 
