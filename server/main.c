@@ -6,9 +6,9 @@
 #include <stdio.h>
 #include <pthread.h>
 #include "strops.h"
-
+#include <fcntl.h>
 #define BUFFER_SIZE 4096
-
+#define FILE_BUFFER_SIZE 1024
 int safe_mode = 1;
 
 char *reset_index_file = "<!DOCTYPE html>\n<html>\n<body>\n\n\n<h1>Security Server</h1>\n\n\n</body>\n</html>";
@@ -88,7 +88,7 @@ void add_camera(int socket, char *request) {
     int index = find_camera_slot();
     char host[16];
     char filename[16];
-    snprintf(filename, sizeof(filename), "camera_%d.mjpeg", index);
+    snprintf(filename, sizeof(filename), "camera_%d.h264", index);
     FILE *file = fopen(filename, "wb");
 
     sscanf(request, "CAMERA_CONNECTION_REQUESTED\nHost: %15s", host);    
@@ -120,7 +120,6 @@ void set_video(int socket) {
     printf("Starting video capture\n");
     
     while ((bytes = read(socket, buffer, 4096))) {
-        printf("Writing\n");
         fwrite(buffer, 1, bytes, Cameras[camera].file);
         fflush(Cameras[camera].file); //to write data in memory to file since we want live updates
     }
@@ -188,7 +187,10 @@ int get_html_file(char *path, char *filedata) {
 }
 
 void start_stream(char *request, int socket) {
-    char *header = "HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=frame\r\nTransfer-Encoding: chunked\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n";
+    char *header = "HTTP/1.1 200 OK\r\n"
+    "Content-Type: video/mp4\r\n"
+    "Cache-Control: no-cache\r\n"
+    "Connection: keep-alive\r\n\r\n";
     printf("Sending stream header\n");    
     if (send(socket, header, strlen(header), 0) < 0) {
         perror("Error sending stream header:");
@@ -209,23 +211,44 @@ void start_stream(char *request, int socket) {
         exit(EXIT_FAILURE);
     }
     char filepath[16];
-    snprintf(filepath, sizeof(filepath), "%s%s", camera, ".mjpeg");
+    snprintf(filepath, sizeof(filepath), "%s%s", camera, ".h264");
     
     int bytes_read;
-    FILE *file = fopen(filepath, "rb");
+    int file_descriptor = open(filepath, O_RDONLY | O_NONBLOCK);
+    if (file_descriptor < 0) {
+        perror("Error opening camera stream file:");
+    }
+    FILE *file = fdopen(file_descriptor, "rb");
     if (!file) {
         perror("Error opening and reading camera file:");
         exit(EXIT_FAILURE);
     }
     char chunk_header[128];
-    char buffer[BUFFER_SIZE] = {0};
-    printf("File opened, init done. Sending bytes of size %d\n", BUFFER_SIZE);
-    while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, file))) {
-        snprintf(chunk_header, sizeof(chunk_header), "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n", bytes_read);
-        send(socket, chunk_header, strlen(chunk_header), 1);
-        send(socket, buffer, bytes_read, 1);
-        send(socket, "\r\n", 2, 0);
+    char buffer[FILE_BUFFER_SIZE] = {0};
+    int pos = 0;
+    printf("File opened, init done: %s\n", filepath);
+    while (1) {
+        fseek(file, 0, SEEK_END);
+        printf("Seeking\n");
+        long end = ftell(file);
+        long avaliable = end - pos;
+        if (avaliable < FILE_BUFFER_SIZE) {
+            printf("File not ready, waiting\n");
+            usleep(10000);
+            continue;
+        }
+        fseek(file, pos, SEEK_SET);
+        printf("Starting read\n");
+        bytes_read = fread(buffer, 1, FILE_BUFFER_SIZE, file);
+        if (bytes_read <= 0) continue;
+        pos += bytes_read;
+        printf("Reading: %d bytes | position: %d | avaliable: %ld | end: %ld\n", bytes_read, pos, avaliable, end);
+        snprintf(chunk_header, sizeof(chunk_header), "%zx\r\n", bytes_read);
+        if (send(socket, chunk_header, strlen(chunk_header), 0) < 0) break;
+        if (send(socket, buffer, bytes_read, 0) < 0) break;
+        if (send(socket, "\r\n", 2, 0) < 0) break;
     }
+    printf("bytes_read value: %d", bytes_read);
 }
 
 void get_request(char *request, int socket) {
@@ -256,6 +279,7 @@ void *client(void *new_socket) {
     
     printf("Request Received\n\n%s\n\n###################\n", buffer);    
 	get_request(buffer, socket);
+    return NULL;
 }
 
 int main() {
@@ -263,6 +287,7 @@ int main() {
 	int server_fd, new_socket;
    	pthread_t client_thread;
    	pthread_mutex_t mutex;
+    
    	int opt = 1;
    	printf("serverfd, client_thread, new_socket, and mutex created\n");
    	
