@@ -11,7 +11,8 @@
 
 void send_video(int socket_fd) {
     FILE *camout;
-
+    char start[1];
+    read(socket_fd, start, 1);
     unsigned char buffer[BUFFER_SIZE];
     camout = popen("rpicam-vid -t 0 --codec h264 --inline --mode 1280:720 --framerate 25 "
                "--shutter 30000 --gain 2 --flicker 60 --awb indoor "

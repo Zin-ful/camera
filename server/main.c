@@ -7,8 +7,10 @@
 #include <pthread.h>
 #include "strops.h"
 #include <fcntl.h>
+#include <signal.h>
+
 #define BUFFER_SIZE 4096
-#define FILE_BUFFER_SIZE 1024
+#define FILE_BUFFER_SIZE 4096
 int safe_mode = 1;
 
 char *reset_index_file = "<!DOCTYPE html>\n<html>\n<body>\n\n\n<h1>Security Server</h1>\n\n\n</body>\n</html>";
@@ -88,7 +90,7 @@ void add_camera(int socket, char *request) {
     int index = find_camera_slot();
     char host[16];
     char filename[16];
-    snprintf(filename, sizeof(filename), "camera_%d.h264", index);
+    snprintf(filename, sizeof(filename), "camera_%d.ts", index);
     FILE *file = fopen(filename, "wb");
 
     sscanf(request, "CAMERA_CONNECTION_REQUESTED\nHost: %15s", host);    
@@ -119,10 +121,6 @@ void set_video(int socket) {
 
     printf("Starting video capture\n");
     
-    while ((bytes = read(socket, buffer, 4096))) {
-        fwrite(buffer, 1, bytes, Cameras[camera].file);
-        fflush(Cameras[camera].file); //to write data in memory to file since we want live updates
-    }
 }
 
 void reset_html_page() {
@@ -187,10 +185,11 @@ int get_html_file(char *path, char *filedata) {
 }
 
 void start_stream(char *request, int socket) {
-    char *header = "HTTP/1.1 200 OK\r\n"
-    "Content-Type: video/mp4\r\n"
-    "Cache-Control: no-cache\r\n"
-    "Connection: keep-alive\r\n\r\n";
+    char *header = 
+    "HTTP/1.1 200 OK\r\n"
+    "Content-Type: video/MP2T\r\n"
+    "Transfer-Encoding: chunked\r\n\r\n";
+
     printf("Sending stream header\n");    
     if (send(socket, header, strlen(header), 0) < 0) {
         perror("Error sending stream header:");
@@ -206,12 +205,13 @@ void start_stream(char *request, int socket) {
             break;   
         }
     }
+    send(Cameras[i].socket, "s", 1, 0);
     if (i == 10 && safe_mode) {
         printf("Camera stream file not found - ending program to prevent file errors. (turn safemode off to disable)\n");
         exit(EXIT_FAILURE);
     }
     char filepath[16];
-    snprintf(filepath, sizeof(filepath), "%s%s", camera, ".h264");
+    snprintf(filepath, sizeof(filepath), "%s%s", camera, ".ts");
     
     int bytes_read;
     int file_descriptor = open(filepath, O_RDONLY | O_NONBLOCK);
@@ -228,7 +228,7 @@ void start_stream(char *request, int socket) {
     int pos = 0;
     printf("File opened, init done: %s\n", filepath);
     while (1) {
-        fseek(file, 0, SEEK_END);
+        /*fseek(file, 0, SEEK_END);
         printf("Seeking\n");
         long end = ftell(file);
         long avaliable = end - pos;
@@ -242,8 +242,10 @@ void start_stream(char *request, int socket) {
         bytes_read = fread(buffer, 1, FILE_BUFFER_SIZE, file);
         if (bytes_read <= 0) continue;
         pos += bytes_read;
-        printf("Reading: %d bytes | position: %d | avaliable: %ld | end: %ld\n", bytes_read, pos, avaliable, end);
-        snprintf(chunk_header, sizeof(chunk_header), "%zx\r\n", bytes_read);
+        printf("Reading: %d bytes | position: %d | avaliable: %ld | end: %ld\n", bytes_read, pos, avaliable, end);*/
+        
+        bytes_read = read(socket, buffer, 4096);
+        snprintf(chunk_header, sizeof(chunk_header), "%x\r\n", bytes_read);
         if (send(socket, chunk_header, strlen(chunk_header), 0) < 0) break;
         if (send(socket, buffer, bytes_read, 0) < 0) break;
         if (send(socket, "\r\n", 2, 0) < 0) break;
@@ -283,7 +285,7 @@ void *client(void *new_socket) {
 }
 
 int main() {
-
+    signal(SIGPIPE, SIG_IGN);
 	int server_fd, new_socket;
    	pthread_t client_thread;
    	pthread_mutex_t mutex;
