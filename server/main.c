@@ -243,8 +243,8 @@ void start_stream(char *request, int socket) {
         if (bytes_read <= 0) continue;
         pos += bytes_read;
         printf("Reading: %d bytes | position: %d | avaliable: %ld | end: %ld\n", bytes_read, pos, avaliable, end);*/
-        
-        bytes_read = read(socket, buffer, 4096);
+        bytes_read = read(Cameras[i].socket, buffer, 4096);
+        printf("Reading %d\n", bytes_read);
         snprintf(chunk_header, sizeof(chunk_header), "%x\r\n", bytes_read);
         if (send(socket, chunk_header, strlen(chunk_header), 0) < 0) break;
         if (send(socket, buffer, bytes_read, 0) < 0) break;
@@ -257,7 +257,7 @@ void get_request(char *request, int socket) {
 	if (strstr(request, "CAMERA_CONNECTION_REQUESTED")) {
         add_camera(socket, request);
         set_video(socket);
-        remove_camera(find_active_camera(socket));
+        //remove_camera(find_active_camera(socket));
         generate_html_page();
     } else if (strstr(request, "/camera")) {
         printf("Starting stream to browser\n");
