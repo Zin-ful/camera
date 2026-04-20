@@ -13,9 +13,7 @@
 #define FILE_BUFFER_SIZE 4096
 int safe_mode = 1;
 
-char *reset_index_file = "<!DOCTYPE html>\n<html>\n<body>\n\n\n<h1>Security Server</h1>\n\n\n</body>\n</html>";
-
-char *index_file = "<!DOCTYPE html>\n<html>\n<body>\n\n\n<h1>Security Server</h1>\n<p><a href='camera_%d'>%s %d</a></p>\n<p><a href='camera_%d'>%s %d</a></p>\n<p><a href='camera_%d'>%s %d</a></p>\n<p><a href='camera_%d'>%s %d</a></p>\n<p><a href='camera_%d'>%s %d</a></p>\n<p><a href='camera_%d'>%s %d</a></p>\n<p><a href='camera_%d'>%s %d</a></p>\n<p><a href='camera_%d'>%s %d</a></p>\n<p><a href='camera_%d'>%s %d</a></p>\n<p><a href='camera_%d'>%s %d</a></p>\n\n\n</body>\n</html>";
+char *reset_index_file = "<!DOCTYPE html>\n<html>\n<body style='background:black;color:white;'>\n<h1>Security Server</h1>\n<p>No cameras connected.</p>\n</body>\n</html>";
 
 struct CameraInfo {
     int active;
@@ -67,20 +65,54 @@ void init_cameras() {
 }
 
 void generate_html_page() {
-    char formatted_html[1024];
-    snprintf(formatted_html, sizeof(formatted_html), index_file,
-    Cameras[0].index, Cameras[0].name, Cameras[0].index,
-    Cameras[1].index, Cameras[1].name, Cameras[1].index,
-    Cameras[2].index, Cameras[2].name, Cameras[2].index,
-    Cameras[3].index, Cameras[3].name, Cameras[3].index,
-    Cameras[4].index, Cameras[4].name, Cameras[4].index,
-    Cameras[5].index, Cameras[5].name, Cameras[5].index,
-    Cameras[6].index, Cameras[6].name, Cameras[6].index,
-    Cameras[7].index, Cameras[7].name, Cameras[7].index,
-    Cameras[8].index, Cameras[8].name, Cameras[8].index,
-    Cameras[9].index, Cameras[9].name, Cameras[9].index);
     FILE *file = fopen("index.html", "w");
-    fwrite(formatted_html, sizeof(char), strlen(formatted_html), file);
+    
+    fprintf(file,
+        "<!DOCTYPE html>\n<html>\n"
+        "<body style='background:black;color:white;'>\n"
+        "<h1>Security Server</h1>\n"
+        "<script>\n"
+        "function startStream(id, path) {\n"
+        "  const mime = 'video/mp4; codecs=\"avc1.42E01E\"';\n"
+        "  const video = document.getElementById(id);\n"
+        "  const ms = new MediaSource();\n"
+        "  video.src = URL.createObjectURL(ms);\n"
+        "  ms.addEventListener('sourceopen', () => {\n"
+        "    const sb = ms.addSourceBuffer(mime);\n"
+        "    sb.mode = 'sequence';\n"
+        "    fetch(path).then(res => {\n"
+        "      const reader = res.body.getReader();\n"
+        "      function pump() {\n"
+        "        reader.read().then(({ done, value }) => {\n"
+        "          if (done) { ms.endOfStream(); return; }\n"
+        "          if (!sb.updating) sb.appendBuffer(value);\n"
+        "          sb.addEventListener('updateend', pump, { once: true });\n"
+        "        });\n"
+        "      }\n"
+        "      pump();\n"
+        "    });\n"
+        "  });\n"
+        "}\n"
+        "</script>\n"
+    );
+
+    for (int i = 0; i < 10; i++) {
+        if (Cameras[i].active) {
+            fprintf(file,
+                "<div>\n"
+                "  <h2>%s %d</h2>\n"
+                "  <video id='cam%d' autoplay muted controls "
+                "         style='width:640px;height:360px;background:#111;'></video>\n"
+                "  <script>startStream('cam%d', '/camera_%d');</script>\n"
+                "</div>\n",
+                Cameras[i].name, Cameras[i].index,
+                i,
+                i, Cameras[i].index
+            );
+        }
+    }
+
+    fprintf(file, "</body>\n</html>\n");
     fclose(file);
 }
 
@@ -120,7 +152,12 @@ void set_video(int socket) {
     int bytes;
 
     printf("Starting video capture\n");
-    
+
+    while ((bytes = read(socket, buffer, 4096))) {
+        printf("Writing\n");
+        fwrite(buffer, 1, bytes, Cameras[camera].file);
+        fflush(Cameras[camera].file); //to write data in memory to>
+    }
 }
 
 void reset_html_page() {
@@ -187,7 +224,7 @@ int get_html_file(char *path, char *filedata) {
 void start_stream(char *request, int socket) {
     char *header = 
     "HTTP/1.1 200 OK\r\n"
-    "Content-Type: video/MP2T\r\n"
+    "Content-Type: video/mp4\r\n"
     "Transfer-Encoding: chunked\r\n\r\n";
 
     printf("Sending stream header\n");    
@@ -205,7 +242,6 @@ void start_stream(char *request, int socket) {
             break;   
         }
     }
-    send(Cameras[i].socket, "s", 1, 0);
     if (i == 10 && safe_mode) {
         printf("Camera stream file not found - ending program to prevent file errors. (turn safemode off to disable)\n");
         exit(EXIT_FAILURE);
@@ -228,7 +264,7 @@ void start_stream(char *request, int socket) {
     int pos = 0;
     printf("File opened, init done: %s\n", filepath);
     while (1) {
-        /*fseek(file, 0, SEEK_END);
+        fseek(file, 0, SEEK_END);
         printf("Seeking\n");
         long end = ftell(file);
         long avaliable = end - pos;
@@ -242,9 +278,7 @@ void start_stream(char *request, int socket) {
         bytes_read = fread(buffer, 1, FILE_BUFFER_SIZE, file);
         if (bytes_read <= 0) continue;
         pos += bytes_read;
-        printf("Reading: %d bytes | position: %d | avaliable: %ld | end: %ld\n", bytes_read, pos, avaliable, end);*/
-        bytes_read = read(Cameras[i].socket, buffer, 4096);
-        printf("Reading %d\n", bytes_read);
+        printf("Reading: %d bytes | position: %d | avaliable: %ld | end: %ld\n", bytes_read, pos, avaliable, end);
         snprintf(chunk_header, sizeof(chunk_header), "%x\r\n", bytes_read);
         if (send(socket, chunk_header, strlen(chunk_header), 0) < 0) break;
         if (send(socket, buffer, bytes_read, 0) < 0) break;

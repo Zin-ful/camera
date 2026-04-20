@@ -12,25 +12,37 @@
 void send_video(int socket_fd) {
     FILE *camout;
     char start[1];
-    printf("Waiting on server..");
-    
-    //Idk what im doing right now
-    //read(socket_fd, start, 1);
-    
+    printf("Waiting on server..");   
     unsigned char buffer[BUFFER_SIZE];
-    camout = popen("rpicam-vid -t 0 --codec h264 --inline --mode 1280:720 --framerate 25 "
-               "--shutter 30000 --gain 2 --flicker 60 --awb indoor "
-               "--brightness 0.2 -o - 2>/dev/null", "r");
-    /* ALTERNATIVE
+    
 
     camout = popen(
+        "rpicam-vid -t 0 --codec h264 --inline --mode 1280:720 --framerate 25 "
+        "--shutter 30000 --gain 2 --flicker 60 --awb indoor "
+        "--brightness 0.2 -o - 2>/dev/null | "
+        "ffmpeg -fflags nobuffer -f h264 -i pipe:0 "
+        "-c:v copy "
+        "-movflags frag_keyframe+empty_moov+default_base_moof "
+        "-f mp4 pipe:1 2>/dev/null",
+        "r"
+        );
+
+    //ALTERNATIVE raw h264
+
+    /*camout = popen("rpicam-vid -t 0 --codec h264 --inline --mode 1280:720 --framerate 25 "
+               "--shutter 30000 --gain 2 --flicker 60 --awb indoor "
+               "--brightness 0.2 -o - 2>/dev/null", "r");*/
+    
+    //ALTERNATIVE ts/mpeg
+
+    /*camout = popen(
     "rpicam-vid -t 0 --codec h264 --inline --mode 1280:720 --framerate 25 "
     "--shutter 30000 --gain 2 --flicker 60 --awb indoor "
     "--brightness 0.2 -o - 2>/dev/null | "
     "ffmpeg -fflags nobuffer -f h264 -i pipe:0 "
     "-c:v copy -f mpegts pipe:1 2>/dev/null",
-    "r");
-    */
+    "r");*/
+    
     if (!camout) {
         perror("Failed to open Pi-Camera:");
     }
